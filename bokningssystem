@@ -1,0 +1,120 @@
+CREATE DATABASE frisor_bokning;
+USE frisor_bokning;
+
+-- TABELLER
+
+-- Kunder
+CREATE TABLE Kunder (
+    KundID INT AUTO_INCREMENT PRIMARY KEY,
+    Namn VARCHAR(100) NOT NULL,
+    Epost VARCHAR(100) NOT NULL UNIQUE
+);
+
+-- Tjänster
+CREATE TABLE Tjanster (
+    TjanstID INT AUTO_INCREMENT PRIMARY KEY,
+    Namn VARCHAR(100) NOT NULL,
+    Pris DECIMAL(10,2) NOT NULL CHECK (Pris >= 0)
+);
+
+-- Bokningar
+CREATE TABLE Bokningar (
+    BokningID INT AUTO_INCREMENT PRIMARY KEY,
+    KundID INT NOT NULL,
+    TjanstID INT NOT NULL,
+    Datum DATETIME NOT NULL,
+    
+    CONSTRAINT fk_kund
+        FOREIGN KEY (KundID) REFERENCES Kunder(KundID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+        
+    CONSTRAINT fk_tjanst
+        FOREIGN KEY (TjanstID) REFERENCES Tjanster(TjanstID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+        
+    CONSTRAINT chk_datum
+        CHECK (Datum >= '2025-01-01 08:00:00')
+);
+
+-- Loggtabell för bekräftelser
+CREATE TABLE BekraftelseLogg (
+    LoggID INT AUTO_INCREMENT PRIMARY KEY,
+    BokningID INT NOT NULL,
+    Meddelande VARCHAR(255) NOT NULL,
+    SkapadTid DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_bokning_logg
+        FOREIGN KEY (BokningID) REFERENCES Bokningar(BokningID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+-- TRIGGER
+
+DELIMITER //
+
+CREATE TRIGGER trg_efter_bokning
+AFTER INSERT ON Bokningar
+FOR EACH ROW
+BEGIN
+    INSERT INTO BekraftelseLogg (BokningID, Meddelande)
+    VALUES (
+        NEW.BokningID,
+        CONCAT('Bokning skapad för kund ID ', NEW.KundID,
+               ' för tjänst ID ', NEW.TjanstID,
+               ' den ', NEW.Datum)
+    );
+END //
+
+DELIMITER ;
+
+
+INSERT INTO Kunder (Namn, Epost) VALUES
+('Anna Svensson', 'anna@mail.com'),
+('Erik Larsson', 'erik@mail.com'),
+('Sara Nilsson', 'sara@mail.com');
+
+INSERT INTO Tjanster (Namn, Pris) VALUES
+('Klippning', 350.00),
+('Färgning', 700.00),
+('Skäggtrimning', 200.00);
+
+-- När en kund bokar en tjänst sparas bokningen här
+INSERT INTO Bokningar (KundID, TjanstID, Datum) VALUES
+(1, 1, '2026-05-10 10:00:00'),
+(2, 2, '2026-05-10 13:30:00'),
+(3, 3, '2026-05-11 09:00:00');
+
+-- Visa alla bokningar med kundnamn och tjänstens namn
+SELECT 
+    b.BokningID,
+    k.Namn AS Kundnamn,
+    t.Namn AS Tjanst,
+    t.Pris,
+    b.Datum
+FROM Bokningar b
+JOIN Kunder k ON b.KundID = k.KundID
+JOIN Tjanster t ON b.TjanstID = t.TjanstID;
+
+-- Hur många bokningar har varje tjänst?
+SELECT 
+    t.Namn AS Tjanst,
+    COUNT(b.BokningID) AS AntalBokningar
+FROM Tjanster t
+LEFT JOIN Bokningar b ON t.TjanstID = b.TjanstID
+GROUP BY t.TjanstID, t.Namn;
+
+-- Total intäkt per tjänst
+SELECT 
+    t.Namn AS Tjanst,
+    COUNT(b.BokningID) AS Antal,
+    SUM(t.Pris) AS TotalIntakt
+FROM Bokningar b
+JOIN Tjanster t ON b.TjanstID = t.TjanstID
+GROUP BY t.TjanstID, t.Namn;
+
+-- VISA BEKRÄFTELSELOGG
+
+SELECT * FROM BekraftelseLogg;
